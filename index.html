@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>Running Software Securely with WebAssembly – ISC2 talk 28th November 2024</title>
+
+		<link rel="stylesheet" href="dist/reset.css">
+		<link rel="stylesheet" href="dist/reveal.css">
+		<link rel="stylesheet" href="dist/theme/dracula.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="plugin/highlight/monokai.css">
+	</head>
+
+	<body>
+		<style>
+			.reveal .slide-number {
+				right: 0;
+				left: 8px;
+				right: unset;
+				font-size: 18px;
+			}
+
+			.reveal blockquote {
+				width: 85%;
+			}
+
+			.container.thirds p,
+			.container.thirds li {
+				font-size: 0.6em;
+				text-align: left;
+			}
+
+
+			.container {
+				display: grid;
+				width: 100%;
+				grid-template-columns: 1fr 1fr;
+				gap: 10px;
+			}
+
+			.thirds {
+				grid-template-columns: 1fr 1fr 1fr;
+			}
+
+
+			.left {
+				padding: 20px;
+			}
+
+			.half p {
+				font-size: 3em;
+			}
+
+			.half p.smaller {
+				font-size: 1em;
+			}
+
+			.right {
+				padding: 20px;
+			}
+
+			.middle {
+				padding: 20px;
+			}
+		</style>
+		<div class="reveal">
+			<div class="slides">
+
+				<!-- slide 1 -->
+				<section>
+					<h1 class="r-fit-text">Running Software Securely with WebAssembly?<br />First you have to invent the
+						Universe!</h1>
+					<p style="font-size: 0.5em">Gabor Javorszky, November 28<sup>th</sup> 2024</p>
+				</section>
+
+				<!-- slide 2 -->
+				<section>
+					<h1>Who am I?</h1>
+					<div class="r-stack">
+						<p class="fragment fade-out" data-fragment-index="1">Senior Engineer, Software at F5 Networks,
+							NGINX team. This presentation is in a personal capacity.</p>
+						<p class="fragment fade-in-then-out" data-fragment-index="1">Previously at a startup called
+							Suborbital (bought by F5). We built a SaaS that allowed our customers to run their
+							customers' untrusted code safely within their or our infrastructure using WebAssembly.</p>
+						<p class="fragment">Now in the NGINX team working on Unit, a universal web server, that allows
+							users to run wasm components within the wasi-http world.</p>
+					</div>
+				</section>
+
+				<!-- slide 3 -->
+				<section data-visibility="">
+					<h1 class="r-fit-text">What am I going to talk about?</h1>
+					<p class="fragment">What is wasm?</p>
+					<p class="fragment">What is untrusted code?</p>
+					<p class="fragment">What is “securely” in this context?</p>
+					<p class="fragment">What does the Universe have to do with this?</p>
+					<p class="fragment">What is wasmtime, WASI, and the bytecode alliance?</p>
+				</section>
+
+				<!-- slide 4 -->
+				<section>
+					<h1>What is wasm?</h1>
+					<div class="fragment" data-fragment-index="0">
+						<blockquote>WebAssembly (abbreviated Wasm) is a binary instruction format for a stack-based
+							virtual machine. Wasm is designed as a portable compilation target for programming
+							languages, enabling deployment on the web for client and server applications.
+						</blockquote>
+						<p>from <a target="_blank" href="https://webassembly.org">webassembly.org</a></p>
+					</div>
+				</section>
+
+				<!-- slide 5 -->
+				<section>
+					<h1>What is wasm?</h1>
+
+					<h2>Source languages to wasm</h2>
+					<div class="container">
+						<div class="half left r-stack">
+							<p class="fragment fade-out" data-fragment-index="1">Go</p>
+							<p class="fragment fade-in-then-out" data-fragment-index="1">.NET</p>
+							<p class="fragment fade-in-then-out">.Rust</p>
+							<p class="fragment fade-in-then-out">C</p>
+							<p class="fragment fade-in-then-out">C++</p>
+							<p class="fragment fade-in-then-out">Kotlin</p>
+							<p class="fragment smaller fade-in-then-out">AssemblyScript</p>
+							<p class="fragment fade-in-then-out">D</p>
+							<p class="fragment fade-in-then-out">Zig</p>
+							<p class="fragment fade-in-then-out">Haskell</p>
+							<p class="fragment fade-in-then-out">Grain</p>
+							<p class="fragment fade-in-then-out">.NET</p>
+						</div>
+						<div class="half right">
+							<p>⇒ .wasm</p>
+						</div>
+					</div>
+				</section>
+
+				<!-- slide 6 -->
+				<section>
+					<h1>What is wasm?</h1>
+					<h2>CPU architecture</h2>
+					<div class="container">
+						<div class="half left r-stack">
+							<p class="fragment fade-out" data-fragment-index="1">x86</p>
+							<p class="fragment fade-in-then-out" data-fragment-index="1">amd64</p>
+							<p class="fragment fade-in-then-out">aarch64</p>
+							<p class="fragment fade-in-then-out">arm</p>
+							<p class="fragment fade-in-then-out">RISC-V</p>
+							<p class="fragment fade-in-then-out">MIPS</p>
+						</div>
+						<div class="half right">
+							<p>⇐ .wasm</p>
+						</div>
+					</div>
+				</section>
+
+				<!-- slide 7 -->
+				<section>
+					<h1 class="r-fit-text">How do you get wasm?</h1>
+					<div class="r-stack" style="max-width: 100%; grid-template-columns: 1fr;">
+						<div class="fragment fade-out" data-fragment-index="1">
+							<p>You write it yourself. Don't actually do this. At this point you're manually shuffling
+								bytes. <a target="_blank"
+									href="https://webassembly.github.io/spec/core/text/ ">Specification</a> and <a
+									href="https://webassembly.github.io/wabt/demo/wasm2wat/" target="_blank">demo</a>.
+							</p>
+							<img src="assets/wat-code.png" alt="source code of a wasm component in text">
+						</div>
+
+						<div class="fragment fade-in-then-out" data-fragment-index="1">
+							<p>You take a pre compiled wasm component and run it yourself</p>
+							<pre><code data-trim data-noescape class="language-shell">
+								$ wasmtime serve -Scli \
+								  --dir /path/to/local/directory::/guest/directory \
+								  your_component.wasm 
+							</code></pre>
+						</div>
+
+						<div class="fragment">
+							<p>You write your software in a language, like Rust, and then compile it down to wasm. I'm
+								going to focus on this.</p>
+						</div>
+				</section>
+
+				<!-- slide 8 -->
+				<section>
+					<h1 class="r-fit-text">How does WebAssembly work?</h1>
+					<p>As WebAssembly components are compiled binary artifacts, they need something to run them. They
+						are called runtimes. Several of them exist:</p>
+					<ul>
+						<li>wasmtime (safest, written in Rust)</li>
+						<li>wasmer (fast, not safe)</li>
+						<li>wazero (written purely in Go)</li>
+					</ul>
+				</section>
+
+				<!-- slide 9 -->
+				<section>
+					<h1>Wasmtime</h1>
+					<p>We've chosen wasmtime to run the components we're handed for a number of reasons, but security is
+						the absolute top one.</p>
+					<p>Many mitigations against accidentally compromising a system.</p>
+				</section>
+
+				<!-- slide 10 -->
+				<section>
+					<h1 class="r-fit-text">Security with wasmtime</h1>
+					<p>Formal verification using the <a href="https://coq.inria.fr/" target="_blank">Coq project</a> and
+						<a href="https://isabelle.in.tum.de/overview.html">Isabelle</a>.
+					</p>
+					<p>Continuous (24/7) fuzz testing of the entire codebase.</p>
+					<p>Bespoke Spectre mitigations both in the WebAssembly spec, and in wasmtime itself.</p>
+					<p>The bytecodealliance has an article on their security practices: <a
+							href="https://bytecodealliance.org/articles/security-and-correctness-in-wasmtime"
+							target="_blank">Security and Correctness in wasmtime</a>.</p>
+				</section>
+
+				<!-- slide 11 -->
+				<section>
+					<h1 class="r-fit-text">Security features</h1>
+
+					<blockquote>WebAssembly programs are sandboxed and isolated from one another and from the host, so
+						they can’t
+						read or write external regions of memory, transfer control to arbitrary code in the process, or
+						freely access the network and filesystem.</blockquote>
+					<p>From the blog post linked.</p>
+				</section>
+
+				<!-- slide 12 -->
+				<section>
+					<h1 class="r-fit-text">Security features</h1>
+
+					<blockquote>... But these security properties only hold true if the WebAssembly runtime’s
+						implementation is
+						correct. This article will highlight the ways we are ensuring correctness in the Wasmtime
+						WebAssembly runtime and in its compiler, Cranelift.</blockquote>
+					<p>From the blog post linked.</p>
+				</section>
+
+				<!-- slide 13 -->
+				<section>
+					<h1 class="r-fit-text">Security features</h1>
+					<p>Because each wasm component gets run in a runtime, that runtime is responsible for providing
+						resources to the components. Those resources include:</p>
+					<ul>
+						<li>Interfaces - imports and exports</li>
+						<li>Environment variables</li>
+						<li>Filesystem</li>
+					</ul>
+					<p>The combination of these is called a world.</p>
+				</section>
+
+				<!-- slide 14 -->
+				<section>
+					<h1>Interfaces</h1>
+					<div class="container">
+						<div class="half left">
+							<p style="font-size: 1em;">Provides</p>
+							<ul>
+								<li>system time</li>
+								<li>http comm functions</li>
+							</ul>
+						</div>
+						<div class="half right">
+							<p style="font-size: 1em;">Wants</p>
+							<ul>
+								<li>system time</li>
+								<li>http comm functions</li>
+								<li class="fragment highlight-red" data-fragment-index="1">filesystem</li>
+								<li class="fragment highlight-red" data-fragment-index="1">environment variables</li>
+							</ul>
+						</div>
+					</div>
+				</section>
+
+				<!-- slide 15 -->
+				<section>
+					<h1>Interfaces</h1>
+					<p style="font-size: 0.8em">Just because a runtime provides an interface for a set of functionality,
+						doesn't mean the component will get real data.</p>
+					<p style="font-size: 0.8em">As an example: the world might say "you can call a function to get the
+						system time", but the world might also not have access to system time.</p>
+					<p style="font-size: 0.8em">Will return a mock value, 1970 January 1st usually.</p>
+				</section>
+
+				<!-- slide 16 -->
+				<section>
+					<h1 class="r-fit-text">Filesystem access</h1>
+					<p>Files need to be explicitly mounted into the runtime, much like in Docker.</p>
+					<p>"You have access to these files and folders at these virtual locations."</p>
+				</section>
+
+				<!-- slide 17 -->
+				<section>
+					<h1 class="r-fit-text">What is WASI?</h1>
+					<p><b>W</b>eb<b>A</b>ssembly <b>S</b>ystem <b>I</b>nterface</p>
+				</section>
+
+				<!-- slide 18 -->
+				<section>
+					<h1 class="r-fit-text">What is WASI?</h1>
+					<blockquote>
+						...group of standards-track API specifications for software compiled to the [...] Wasm standard.
+						WASI is designed to provide a secure standard interface for applications that can be compiled to
+						Wasm from any language...
+					</blockquote>
+				</section>
+
+				<!-- slide 19 -->
+				<section>
+					<h1 class="r-fit-text">What is WASI?</h1>
+					<p>A set of interfaces for common use cases: HTTP, filesystem, I/O, clocks, random, sockets, CLI,
+						and more, provided as WIT world files.</p>
+					<p>See <a href="https://wasi.dev/" target="_blank">WASI.dev</a> for more info.</p>
+				</section>
+
+				<!-- slide 20 -->
+				<section>
+					<h1 class="r-fit-text">Nothing by default</h1>
+					<p>Components do not have access to anything on the host system by default. Everything needs to be
+						very explicitly enabled and made available to them (exported).</p>
+					<p>You can't misuse something that doesn't exist.</p>
+				</section>
+
+				<!-- slide 21 -->
+				<section>
+					<h1 class="r-fit-text">Nothing by default</h1>
+					<p>If you have a provide-nothing runtime, and a component that needs functionality, you can compose
+						that component with another one that will export the needed functions, returning mock data.</p>
+				</section>
+
+				<!-- slide 22 -->
+				<section>
+					<h1 class="r-fit-text">Nothing by default</h1>
+					<div class="container">
+						<div class="half left">
+							<p style="font-size: 1em;">Runtime provides</p>
+							<p><i>Nothing</i></p>
+						</div>
+						<div class="half right">
+							<p style="font-size: 1em;">Component needs</p>
+							<ul>
+								<li class="fragment highlight-red" data-fragment-index="1">⇒ system time</li>
+								<li class="fragment highlight-red" data-fragment-index="1">⇒ function_A</li>
+								<li class="fragment highlight-red" data-fragment-index="1">⇒ function_B</li>
+							</ul>
+						</div>
+					</div>
+				</section>
+
+				<!-- slide 23 -->
+				<section>
+					<h1 class="r-fit-text">Nothing by default</h1>
+					<div class="container thirds">
+						<div class="third left">
+							<p style="font-size: 1em; text-align: center">Runtime provides</p>
+							<p><i>Nothing</i></p>
+						</div>
+
+						<div class="third middle">
+							<p style="font-size: 1em; text-align: center">Bridge component</p>
+							<p>Imports nothing</p>
+							<p>Exports:</p>
+							<ul>
+								<li class="fragment highlight-green" data-fragment-index="1">function for system time ⇒
+								</li>
+								<li class="fragment highlight-green" data-fragment-index="1">function_A ⇒</li>
+								<li class="fragment highlight-green" data-fragment-index="1">function_B ⇒</li>
+							</ul>
+						</div>
+
+						<div class="third right">
+							<p style="font-size: 1em; text-align: center">Component needs</p>
+							<ul>
+								<li class="fragment highlight-green" data-fragment-index="1">⇒ system time</li>
+								<li class="fragment highlight-green" data-fragment-index="1">⇒ function_A</li>
+								<li class="fragment highlight-green" data-fragment-index="1">⇒ function_B</li>
+							</ul>
+						</div>
+					</div>
+				</section>
+
+				<!-- slide 24 -->
+				<section>
+					<h1 class="r-fit-text">What can you use it for?</h1>
+					<p>Client hands you a .wasm component that uses your specific world, or any of the WASI worlds.</p>
+					<p>You can then run it with wasmtime without worrying that the component will do anything
+						unexpected.</p>
+				</section>
+
+				<!-- slide 25 -->
+				<section>
+					<h1 class="r-fit-text">Failure modes</h1>
+					<ul>
+						<li>Unknown unknowns</li>
+						<li>Bugs in the runtime (massively mitigated in wasmtime)</li>
+						<li>component bugs, like crashes internally</li>
+					</ul>
+				</section>
+
+				<!-- slide 26 -->
+				<section>
+					<h1 class="r-fit-text">Resources and links</h1>
+					<ul>
+						<li><a href="https://webassembly.org/" target="_blank">WebAssembly.org</a></li>
+						<li><a href="https://wasmtime.dev/" target="_blank">Wasmtime runtime</a></li>
+						<li><a href="https://bytecodealliance.org/" target="_blank">ByteCodeAlliance</a></li>
+						<li><a href="https://bytecodealliance.org/articles/security-and-correctness-in-wasmtime"
+								target="_blank">Security and Correctness in Wasmtime blog post</a></li>
+						<li><a href="https://wasi.dev/" target="_blank">WASI</a></li>
+					</ul>
+				</section>
+
+				<!-- slide 27 -->
+				<section>
+					<h1 class="r-fit-text">Resources and links</h1>
+					<ul>
+						<li><a href="https://www.fermyon.com/spin" target="_blank">Fermyon Spin (deploy wasm)</a></li>
+						<li><a href="https://cosmonic.com/" target="_blank">Cosmonic (deploy wasm)</a></li>
+						<li><a href="https://x.com/solomonstre/status/1111004913222324225?lang=en-GB" target="_blank">Solomon Hykes (founder of Docker) on WASM and Docker</a></li>
+						<li><a href="https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/webassembly.html" target="_blank">Samsung developer docs on creating wasm apps for smart TVs</a></li>
+						<li><a href="https://www.amplifypartners.com/blog-posts/how-webassembly-gets-used-the-18-most-exciting-startups-building-with-wasm"
+								target="_blank">Amplify Partners startups using WASM (Suborbital is in the list)</a></li>
+					</ul>
+				</section>
+
+				<!-- slide 28 -->
+				<section>
+					<h1 class="r-fit-text">Resources and links</h1>
+					<ul>
+						<li><a href="https://web.dev/articles/ps-on-the-web" target="_blank">Photoshop on the web using wasm</a></li>
+
+						<li><a href="https://web.autocad.com/login" target="_blank">YouTube talk on how AutoCAD moved to the web using WebAssembly</a></li>
+
+						<li><a href="https://web.autocad.com/login" target="_blank">AutoCAD web product</a></li>
+
+
+						https://web.autocad.com/login
+
+						<li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/?view=aspnetcore-9.0" target="_blank">Microsoft Blazor is based on WebAssembly</a></li>
+
+						<li><a href="hhttps://www.figma.com/blog/webassembly-cut-figmas-load-time-by-3x/" target="_blank">How Figma is using WebAssembly</a></li>
+					</ul>
+				</section>
+
+				<!-- slide 29 -->
+				<section>
+					<h1>Q&A</h1>
+					<p>Connect with me on <a href="https://www.linkedin.com/in/javorszky/" target="_blank">LinkedIn</a>,
+						<a href="https://bsky.app/profile/javorszky.rocks">BlueSky</a>, or <a
+							href="https://javorszky.co.uk">my blog</a>.
+					</p>
+				</section>
+			</div>
+		</div>
+
+		<script src="dist/reveal.js"></script>
+		<script src="plugin/notes/notes.js"></script>
+		<script src="plugin/markdown/markdown.js"></script>
+		<script src="plugin/highlight/highlight.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+
+				progress: true,
+				// slideNumber: "h.v",
+				// hashOneBasedIndex: true,
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+			});
+		</script>
+	</body>
+
+</html>
